@@ -35,22 +35,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     _loadConversations();
   }
 
-  String? _resolveAvatarUrl(String? avatar) {
-    if (avatar == null || avatar.isEmpty) return null;
-    
-    // Fix backend returning absolute localhost URLs
-    if (avatar.startsWith('http://localhost') || avatar.startsWith('http://127.0.0.1')) {
-      try {
-        final uri = Uri.parse(avatar);
-        return _auth.apiBase + uri.path;
-      } catch (_) {}
-    }
-    
-    if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
-      return avatar;
-    }
-    return '${_auth.apiBase}${avatar.startsWith('/') ? '' : '/'}$avatar';
-  }
+// Local URL resolver removed in favor of ApiService.resolveMediaUrl
 
   Future<void> _loadConversations() async {
     try {
@@ -164,11 +149,11 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                     // Avatar - Clickable for profile
                     GestureDetector(
                       onTap: _openProfile,
-                      child: _resolveAvatarUrl(me?.avatar) != null
+                      child: _api.resolveMediaUrl(me?.avatar).isNotEmpty
                           ? CircleAvatar(
                               radius: 18,
                               backgroundImage: CachedNetworkImageProvider(
-                                  _resolveAvatarUrl(me?.avatar)!),
+                                  _api.resolveMediaUrl(me?.avatar)),
                             )
                           : CircleAvatar(
                               radius: 18,
@@ -287,7 +272,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
           conv: items[i],
           textColor: textColor,
           subColor: subColor,
-          avatarUrl: _resolveAvatarUrl(items[i].otherUser.avatar),
+          avatarUrl: _api.resolveMediaUrl(items[i].otherUser.avatar).isEmpty ? null : _api.resolveMediaUrl(items[i].otherUser.avatar),
           onTap: () => _openConversation(items[i]),
         ),
       ),
@@ -318,9 +303,9 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                 Divider(height: 1, indent: 72, color: dividerColor),
             itemBuilder: (_, i) {
               final user = _allUsers[i];
-              final avatarUrl = _resolveAvatarUrl(user.avatar);
+              final avatarUrl = _api.resolveMediaUrl(user.avatar);
               return ListTile(
-                leading: avatarUrl != null
+                leading: avatarUrl.isNotEmpty
                     ? CircleAvatar(
                         backgroundImage: CachedNetworkImageProvider(avatarUrl),
                       )

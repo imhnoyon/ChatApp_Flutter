@@ -55,32 +55,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollCtrl.addListener(_onScroll);
   }
 
-  String _fullUrl(String? path) {
-    if (path == null || path.isEmpty) return '';
-    
-    // Fix backend returning absolute localhost URLs
-    if (path.startsWith('http://localhost') || path.startsWith('http://127.0.0.1')) {
-      try {
-        final uri = Uri.parse(path);
-        return _auth.apiBase + uri.path;
-      } catch (_) {}
-    }
-    
-    if (path.startsWith('http') || path.startsWith('blob:')) return path;
-    return _auth.apiBase + (path.startsWith('/') ? '' : '/') + path;
-  }
-
-  String? _resolveAvatarUrl(String? avatar) {
-    if (avatar == null || avatar.isEmpty) return null;
-    if (avatar.startsWith('http://localhost') || avatar.startsWith('http://127.0.0.1')) {
-      try {
-        final uri = Uri.parse(avatar);
-        return _auth.apiBase + uri.path;
-      } catch (_) {}
-    }
-    if (avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar;
-    return '${_auth.apiBase}${avatar.startsWith('/') ? '' : '/'}$avatar';
-  }
+// Local URL resolvers removed in favor of ApiService.resolveMediaUrl
 
   @override
   void dispose() {
@@ -205,7 +180,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
             // Background "Warm up": Pre-fetch images as soon as they arrive via socket
             if (serverMsg.messageType == 'image' && serverMsg.file != null) {
-              final url = _fullUrl(serverMsg.file);
+              final url = _api.resolveMediaUrl(serverMsg.file);
               if (url.isNotEmpty) {
                 precacheImage(CachedNetworkImageProvider(url), context)
                     .catchError((_) {});
@@ -674,11 +649,11 @@ class _ChatScreenState extends State<ChatScreen> {
                         Navigator.of(context).pop();
                       },
                     ),
-                    _resolveAvatarUrl(_conv.otherUser.avatar) != null
+                    _api.resolveMediaUrl(_conv.otherUser.avatar).isNotEmpty
                         ? CircleAvatar(
                             radius: 18,
                             backgroundImage: CachedNetworkImageProvider(
-                                _resolveAvatarUrl(_conv.otherUser.avatar)!),
+                                _api.resolveMediaUrl(_conv.otherUser.avatar)),
                           )
                         : CircleAvatar(
                             radius: 18,

@@ -60,6 +60,24 @@ class ApiService {
 
   String _url(String path) => '${_auth.apiBase}$path';
 
+  String resolveMediaUrl(String? path) {
+    if (path == null || path.isEmpty) return '';
+    
+    // Fix backend returning absolute localhost URLs
+    if (path.startsWith('http://localhost') || path.startsWith('http://127.0.0.1')) {
+      try {
+        final uri = Uri.parse(path);
+        return _auth.apiBase + uri.path;
+      } catch (_) {}
+    }
+    
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) {
+      return path;
+    }
+    
+    return '${_auth.apiBase}${path.startsWith('/') ? '' : '/'}$path';
+  }
+
   Future<dynamic> get(String path, {bool noAuth = false}) async {
     final headers = noAuth ? {'Content-Type': 'application/json'} : _headers;
     final res = await http.get(Uri.parse(_url(path)), headers: headers);

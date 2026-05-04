@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../models/models.dart';
 import '../theme.dart';
+import '../services/api_service.dart';
 
 class MessageBubble extends StatefulWidget {
   final Message message;
@@ -30,20 +31,7 @@ class MessageBubble extends StatefulWidget {
 class _MessageBubbleState extends State<MessageBubble> {
   bool _showReactions = false;
 
-  String _fullUrl(String? path) {
-    if (path == null || path.isEmpty) return '';
-    
-    // Fix backend returning absolute localhost URLs
-    if (path.startsWith('http://localhost') || path.startsWith('http://127.0.0.1')) {
-      try {
-        final uri = Uri.parse(path);
-        return widget.apiBase + uri.path;
-      } catch (_) {}
-    }
-    
-    if (path.startsWith('http') || path.startsWith('blob:')) return path;
-    return widget.apiBase + (path.startsWith('/') ? '' : '/') + path;
-  }
+  String _fullUrl(String? path) => ApiService().resolveMediaUrl(path);
 
   String _formatTime(DateTime t) {
     final h = t.hour;

@@ -59,13 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  String? _resolveAvatarUrl(String? avatar) {
-    if (avatar == null || avatar.isEmpty) return null;
-    if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
-      return avatar;
-    }
-    return '${_auth.apiBase}${avatar.startsWith('/') ? '' : '/'}$avatar';
-  }
+// Local URL resolver removed in favor of ApiService.resolveMediaUrl
 
   Future<void> _saveProfile() async {
     final newUsername = _usernamCtrl.text.trim();
@@ -183,11 +177,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               radius: 60,
                               backgroundImage: FileImage(_newAvatarFile!),
                             )
-                          : (_resolveAvatarUrl(_user.avatar) != null
+                          : (_api.resolveMediaUrl(_user.avatar).isNotEmpty
                               ? CircleAvatar(
                                   radius: 60,
                                   backgroundImage: CachedNetworkImageProvider(
-                                      _resolveAvatarUrl(_user.avatar)!),
+                                      _api.resolveMediaUrl(_user.avatar)),
                                 )
                               : CircleAvatar(
                                   radius: 60,
