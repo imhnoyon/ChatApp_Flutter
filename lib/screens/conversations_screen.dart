@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'chat_screen.dart';
 import 'profile_screen.dart';
 
@@ -32,6 +33,23 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   void initState() {
     super.initState();
     _loadConversations();
+  }
+
+  String? _resolveAvatarUrl(String? avatar) {
+    if (avatar == null || avatar.isEmpty) return null;
+    
+    // Fix backend returning absolute localhost URLs
+    if (avatar.startsWith('http://localhost') || avatar.startsWith('http://127.0.0.1')) {
+      try {
+        final uri = Uri.parse(avatar);
+        return _auth.apiBase + uri.path;
+      } catch (_) {}
+    }
+    
+    if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
+      return avatar;
+    }
+    return '${_auth.apiBase}${avatar.startsWith('/') ? '' : '/'}$avatar';
   }
 
   Future<void> _loadConversations() async {
@@ -146,17 +164,23 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                     // Avatar - Clickable for profile
                     GestureDetector(
                       onTap: _openProfile,
-                      child: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: kBrandGreen,
-                        child: Text(
-                          me?.initials ?? '?',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14),
-                        ),
-                      ),
+                      child: _resolveAvatarUrl(me?.avatar) != null
+                          ? CircleAvatar(
+                              radius: 18,
+                              backgroundImage: CachedNetworkImageProvider(
+                                  _resolveAvatarUrl(me?.avatar)!),
+                            )
+                          : CircleAvatar(
+                              radius: 18,
+                              backgroundColor: kBrandGreen,
+                              child: Text(
+                                me?.initials ?? '?',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14),
+                              ),
+                            ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
