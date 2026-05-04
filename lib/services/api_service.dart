@@ -249,6 +249,12 @@ class ApiService {
     return Message.fromJson(data as Map<String, dynamic>);
   }
 
+  Future<void> deleteMessage(int convId, int msgId) async {
+    final uri = Uri.parse(_url('/api/conversations/$convId/messages/$msgId/delete/'));
+    final res = await http.delete(uri, headers: _headers);
+    _handleResponse(res);
+  }
+
   // Users
   Future<List<User>> getUsers() async {
     final data = await get('/api/users/');

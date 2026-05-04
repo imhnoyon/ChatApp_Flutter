@@ -12,6 +12,7 @@ class MessageBubble extends StatefulWidget {
   final String apiBase;
   final void Function(String emoji) onReact;
   final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
   final int? myUserId;
 
   const MessageBubble({
@@ -21,6 +22,7 @@ class MessageBubble extends StatefulWidget {
     required this.apiBase,
     required this.onReact,
     this.onEdit,
+    this.onDelete,
     this.myUserId,
   });
 
@@ -140,6 +142,15 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 onTap: widget.onEdit,
                                 child: Icon(Icons.edit_outlined,
                                     size: 12, color: metaColor),
+                              ),
+                            ],
+                            // Delete button
+                            if (widget.onDelete != null) ...[
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: widget.onDelete,
+                                child: Icon(Icons.delete_outline,
+                                    size: 14, color: Colors.redAccent.withOpacity(0.8)),
                               ),
                             ],
                           ],

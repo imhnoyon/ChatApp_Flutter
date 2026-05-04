@@ -612,6 +612,36 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _deleteMessage(Message msg) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Message?'),
+        content: const Text('This will permanently remove the message.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _api.deleteMessage(_conv.id, msg.id);
+      setState(() {
+        _messages.removeWhere((m) => m.id == msg.id);
+      });
+      _showSnack('Message deleted');
+    } catch (e) {
+      _showSnack(e.toString());
+    }
+  }
+
   void _showSnack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -741,6 +771,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                     });
                                     _focusNode.requestFocus();
                                   }
+                                : null,
+                            onDelete: msg.senderId == _auth.me?.id && !msg.optimistic
+                                ? () => _deleteMessage(msg)
                                 : null,
                             myUserId: _auth.me?.id,
                           );
