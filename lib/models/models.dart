@@ -4,13 +4,16 @@ class User {
   final String? fullName;
   final String? email;
   final String? avatar;
+  final bool isOnline;
 
-  User(
-      {required this.id,
+  User({
+      required this.id,
       required this.username,
       this.fullName,
       this.email,
-      this.avatar});
+      this.avatar,
+      this.isOnline = false,
+  });
 
   String get displayName => fullName?.isNotEmpty == true ? fullName! : username;
   String get initials =>
@@ -22,6 +25,7 @@ class User {
         fullName: json['full_name'] as String?,
         email: json['email'] as String?,
         avatar: json['avatar'] as String?,
+        isOnline: json['is_online'] as bool? ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -30,6 +34,7 @@ class User {
         'full_name': fullName,
         'email': email,
         'avatar': avatar,
+        'is_online': isOnline,
       };
 }
 

@@ -21,7 +21,7 @@ class ChatApp extends StatefulWidget {
   State<ChatApp> createState() => _ChatAppState();
 }
 
-class _ChatAppState extends State<ChatApp> {
+class _ChatAppState extends State<ChatApp> with WidgetsBindingObserver {
   final _auth = AuthService();
   bool _isDark = true;
   bool _loggedIn = false;
@@ -30,11 +30,36 @@ class _ChatAppState extends State<ChatApp> {
   void initState() {
     super.initState();
     _loggedIn = _auth.isLoggedIn;
+    WidgetsBinding.instance.addObserver(this);
+    if (_loggedIn) {
+      ApiService().setOnlineStatus(true);
+    }
   }
 
-  void _onLogin() => setState(() => _loggedIn = true);
-  void _onLogout() {
-    _auth.clear();
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_loggedIn) return;
+    if (state == AppLifecycleState.resumed) {
+      ApiService().setOnlineStatus(true);
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      ApiService().setOnlineStatus(false);
+    }
+  }
+
+  void _onLogin() {
+    setState(() => _loggedIn = true);
+    ApiService().setOnlineStatus(true);
+  }
+
+  void _onLogout() async {
+    await ApiService().setOnlineStatus(false);
+    await _auth.clear();
     setState(() => _loggedIn = false);
   }
 

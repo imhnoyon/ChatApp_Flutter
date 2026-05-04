@@ -100,7 +100,7 @@ class ApiService {
     } catch (_) {
       data = {};
     }
-    
+
     if (res.statusCode >= 200 && res.statusCode < 300) return data;
 
     String msg = 'Request failed';
@@ -124,7 +124,7 @@ class ApiService {
         msg = errors.join('\n');
       }
     }
-    
+
     throw Exception(msg);
   }
 
@@ -236,5 +236,23 @@ class ApiService {
     final data = await get('/api/users/');
     final list = data is List ? data : (data['data'] as List? ?? []);
     return list.map((e) => User.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> setOnlineStatus(bool isOnline) async {
+    if (!_auth.isLoggedIn) return;
+    try {
+      await patch('/api/auth/me/', {'is_online': isOnline});
+      if (_auth.me != null) {
+        _auth.me = User(
+          id: _auth.me!.id,
+          username: _auth.me!.username,
+          fullName: _auth.me!.fullName,
+          email: _auth.me!.email,
+          avatar: _auth.me!.avatar,
+          isOnline: isOnline,
+        );
+        await _auth.save();
+      }
+    } catch (_) {}
   }
 }
