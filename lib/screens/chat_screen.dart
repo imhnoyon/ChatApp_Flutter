@@ -28,6 +28,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _recorder = AudioRecorder();
+  final _focusNode = FocusNode();
 
   List<Message> _messages = [];
   bool _loading = true;
@@ -42,6 +43,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _recordStopInProgress = false;
   String? _recordPath;
   bool _isOnline = false;
+  Message? _editingMessage;
 
   late Conversation _conv;
 
@@ -76,6 +78,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     _recorder.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -313,9 +316,25 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _cancelEditing() {
+    setState(() {
+      _editingMessage = null;
+      _msgCtrl.clear();
+    });
+  }
+
   void _sendMessage() {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty) return;
+
+    if (_editingMessage != null) {
+      if (text != _editingMessage!.text) {
+        _editMessage(_editingMessage!, text);
+      }
+      _cancelEditing();
+      return;
+    }
+
     _msgCtrl.clear();
     final tempId = DateTime.now().millisecondsSinceEpoch;
     final tempMsg = Message(
@@ -722,7 +741,13 @@ class _ChatScreenState extends State<ChatScreen> {
                             onEdit: msg.senderId == _auth.me?.id &&
                                     msg.messageType == 'text' &&
                                     !msg.optimistic
-                                ? (newText) => _editMessage(msg, newText)
+                                ? () {
+                                    setState(() {
+                                      _editingMessage = msg;
+                                      _msgCtrl.text = msg.text ?? '';
+                                    });
+                                    _focusNode.requestFocus();
+                                  }
                                 : null,
                             myUserId: _auth.me?.id,
                           );
@@ -776,6 +801,53 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
 
+          // Editing Indicator
+          if (_editingMessage != null)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              color: isDark ? kDarkSurface : const Color(0xFFEBEBEB),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.edit, color: kBrandGreen, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Editing message',
+                          style: TextStyle(
+                              color: kBrandGreen,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _editingMessage!.text ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: isDark ? kDarkSubText : kLightSubText,
+                              fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _cancelEditing,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.close,
+                          color: isDark ? kDarkSubText : kLightSubText,
+                          size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Footer
           Container(
             color: footerBg,
@@ -796,6 +868,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       child: TextField(
                         controller: _msgCtrl,
+                        focusNode: _focusNode,
                         style: TextStyle(color: inputTextColor, fontSize: 14),
                         onChanged: _onTypingInput,
                         maxLines: 4,

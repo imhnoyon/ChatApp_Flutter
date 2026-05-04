@@ -10,7 +10,7 @@ class MessageBubble extends StatefulWidget {
   final bool isMine;
   final String apiBase;
   final void Function(String emoji) onReact;
-  final void Function(String newText)? onEdit;
+  final VoidCallback? onEdit;
   final int? myUserId;
 
   const MessageBubble({
@@ -29,14 +29,6 @@ class MessageBubble extends StatefulWidget {
 
 class _MessageBubbleState extends State<MessageBubble> {
   bool _showReactions = false;
-  bool _editMode = false;
-  final _editCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _editCtrl.dispose();
-    super.dispose();
-  }
 
   String _fullUrl(String? path) {
     if (path == null || path.isEmpty) return '';
@@ -124,24 +116,11 @@ class _MessageBubbleState extends State<MessageBubble> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Content
-                        if (_editMode)
-                          _EditInput(
-                            ctrl: _editCtrl,
-                            onSave: () {
-                              final t = _editCtrl.text.trim();
-                              if (t.isNotEmpty && t != msg.text) {
-                                widget.onEdit?.call(t);
-                              }
-                              setState(() => _editMode = false);
-                            },
-                            onCancel: () => setState(() => _editMode = false),
-                          )
-                        else
-                          _MessageContent(
-                            msg: msg,
-                            textColor: textColor,
-                            fullUrl: _fullUrl,
-                          ),
+                        _MessageContent(
+                          msg: msg,
+                          textColor: textColor,
+                          fullUrl: _fullUrl,
+                        ),
 
                         const SizedBox(height: 2),
 
@@ -152,9 +131,11 @@ class _MessageBubbleState extends State<MessageBubble> {
                             if (msg.isEdited)
                               Padding(
                                 padding: const EdgeInsets.only(right: 4),
-                                child: Text('(edited)',
+                                child: Text('Edited',
                                     style: TextStyle(
-                                        color: metaColor, fontSize: 10)),
+                                        color: metaColor, 
+                                        fontSize: 10,
+                                        fontStyle: FontStyle.italic)),
                               ),
                             Text(
                               _formatTime(msg.createdAt),
@@ -165,13 +146,10 @@ class _MessageBubbleState extends State<MessageBubble> {
                               _StatusIcon(status: msg.status),
                             ],
                             // Edit button
-                            if (widget.onEdit != null && !_editMode) ...[
+                            if (widget.onEdit != null) ...[
                               const SizedBox(width: 6),
                               GestureDetector(
-                                onTap: () {
-                                  _editCtrl.text = msg.text ?? '';
-                                  setState(() => _editMode = true);
-                                },
+                                onTap: widget.onEdit,
                                 child: Icon(Icons.edit_outlined,
                                     size: 12, color: metaColor),
                               ),
@@ -516,49 +494,4 @@ class _ReactionsRow extends StatelessWidget {
   }
 }
 
-class _EditInput extends StatelessWidget {
-  final TextEditingController ctrl;
-  final VoidCallback onSave, onCancel;
-
-  const _EditInput(
-      {required this.ctrl, required this.onSave, required this.onCancel});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Column(
-      children: [
-        TextField(
-          controller: ctrl,
-          style:
-              TextStyle(color: isDark ? kDarkText : kLightText, fontSize: 14),
-          autofocus: true,
-          onSubmitted: (_) => onSave(),
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            isDense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          TextButton(
-              onPressed: onCancel,
-              style: TextButton.styleFrom(
-                  minimumSize: Size.zero,
-                  padding: const EdgeInsets.symmetric(horizontal: 8)),
-              child: const Text('Cancel',
-                  style: TextStyle(color: Colors.redAccent, fontSize: 12))),
-          const SizedBox(width: 4),
-          TextButton(
-              onPressed: onSave,
-              style: TextButton.styleFrom(
-                  minimumSize: Size.zero,
-                  padding: const EdgeInsets.symmetric(horizontal: 8)),
-              child: const Text('Save',
-                  style: TextStyle(color: kBrandGreen, fontSize: 12))),
-        ]),
-      ],
-    );
-  }
-}
+// EditInput widget removed
