@@ -287,6 +287,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
           conv: items[i],
           textColor: textColor,
           subColor: subColor,
+          avatarUrl: _resolveAvatarUrl(items[i].otherUser.avatar),
           onTap: () => _openConversation(items[i]),
         ),
       ),
@@ -317,13 +318,18 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                 Divider(height: 1, indent: 72, color: dividerColor),
             itemBuilder: (_, i) {
               final user = _allUsers[i];
+              final avatarUrl = _resolveAvatarUrl(user.avatar);
               return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: kBrandGreen,
-                  child: Text(user.initials,
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
+                leading: avatarUrl != null
+                    ? CircleAvatar(
+                        backgroundImage: CachedNetworkImageProvider(avatarUrl),
+                      )
+                    : CircleAvatar(
+                        backgroundColor: kBrandGreen,
+                        child: Text(user.initials,
+                            style: const TextStyle(
+                                color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
                 title: Text(user.displayName,
                     style: TextStyle(
                         color: textColor, fontWeight: FontWeight.w500)),
@@ -345,12 +351,14 @@ class _ConvTile extends StatelessWidget {
   final Conversation conv;
   final Color textColor, subColor;
   final VoidCallback onTap;
+  final String? avatarUrl;
 
   const _ConvTile({
     required this.conv,
     required this.textColor,
     required this.subColor,
     required this.onTap,
+    this.avatarUrl,
   });
 
   String _lastMsgPreview() {
@@ -384,17 +392,22 @@ class _ConvTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: kBrandGreen,
-              child: Text(
-                conv.otherUser.initials,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18),
-              ),
-            ),
+            avatarUrl != null
+                ? CircleAvatar(
+                    radius: 24,
+                    backgroundImage: CachedNetworkImageProvider(avatarUrl!),
+                  )
+                : CircleAvatar(
+                    radius: 24,
+                    backgroundColor: kBrandGreen,
+                    child: Text(
+                      conv.otherUser.initials,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18),
+                    ),
+                  ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

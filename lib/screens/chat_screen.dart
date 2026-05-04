@@ -70,6 +70,18 @@ class _ChatScreenState extends State<ChatScreen> {
     return _auth.apiBase + (path.startsWith('/') ? '' : '/') + path;
   }
 
+  String? _resolveAvatarUrl(String? avatar) {
+    if (avatar == null || avatar.isEmpty) return null;
+    if (avatar.startsWith('http://localhost') || avatar.startsWith('http://127.0.0.1')) {
+      try {
+        final uri = Uri.parse(avatar);
+        return _auth.apiBase + uri.path;
+      } catch (_) {}
+    }
+    if (avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar;
+    return '${_auth.apiBase}${avatar.startsWith('/') ? '' : '/'}$avatar';
+  }
+
   @override
   void dispose() {
     _typingTimer?.cancel();
@@ -662,17 +674,23 @@ class _ChatScreenState extends State<ChatScreen> {
                         Navigator.of(context).pop();
                       },
                     ),
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: isDark ? kBrandGreen : Colors.white24,
-                      child: Text(
-                        _conv.otherUser.initials,
-                        style: TextStyle(
-                            color: isDark ? Colors.white : Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14),
-                      ),
-                    ),
+                    _resolveAvatarUrl(_conv.otherUser.avatar) != null
+                        ? CircleAvatar(
+                            radius: 18,
+                            backgroundImage: CachedNetworkImageProvider(
+                                _resolveAvatarUrl(_conv.otherUser.avatar)!),
+                          )
+                        : CircleAvatar(
+                            radius: 18,
+                            backgroundColor: isDark ? kBrandGreen : Colors.white24,
+                            child: Text(
+                              _conv.otherUser.initials,
+                              style: TextStyle(
+                                  color: isDark ? Colors.white : Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14),
+                            ),
+                          ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
