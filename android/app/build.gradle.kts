@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.chatapp"
+    namespace = "com.mahedi.chatapp"
     compileSdk = flutter.compileSdkVersion
     
     // 1. CHANGE THIS: Set the specific NDK version
@@ -22,7 +22,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.chatapp"
+        applicationId = "com.mahedi.chatapp"
         
         // 2. CHANGE THIS: Set minSdk to 23
         minSdk = 23
@@ -31,7 +31,15 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
-    // ... rest of the file
+    buildTypes {
+        getByName("release") {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+    }
 }
 
 
