@@ -62,19 +62,22 @@ class ApiService {
 
   String resolveMediaUrl(String? path) {
     if (path == null || path.isEmpty) return '';
-    
+
     // Fix backend returning absolute localhost URLs
-    if (path.startsWith('http://localhost') || path.startsWith('http://127.0.0.1')) {
+    if (path.startsWith('http://localhost') ||
+        path.startsWith('http://127.0.0.1')) {
       try {
         final uri = Uri.parse(path);
         return _auth.apiBase + uri.path;
       } catch (_) {}
     }
-    
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) {
+
+    if (path.startsWith('http://') ||
+        path.startsWith('https://') ||
+        path.startsWith('blob:')) {
       return path;
     }
-    
+
     return '${_auth.apiBase}${path.startsWith('/') ? '' : '/'}$path';
   }
 
@@ -250,7 +253,8 @@ class ApiService {
   }
 
   Future<void> deleteMessage(int convId, int msgId) async {
-    final uri = Uri.parse(_url('/api/conversations/$convId/messages/$msgId/delete/'));
+    final uri =
+        Uri.parse(_url('/api/conversations/$convId/messages/$msgId/delete/'));
     final res = await http.delete(uri, headers: _headers);
     _handleResponse(res);
   }
@@ -278,5 +282,39 @@ class ApiService {
         await _auth.save();
       }
     } catch (_) {}
+  }
+
+  // Calls
+  Future<CallSession> initiateCall(int convId, String callType) async {
+    final data = await post(
+        '/api/conversations/$convId/calls/initiate/', {'call_type': callType});
+    return CallSession.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> answerCall(int convId, int callId) async {
+    await patch('/api/conversations/$convId/calls/$callId/answer/', {});
+  }
+
+  Future<void> rejectCall(int convId, int callId) async {
+    await patch('/api/conversations/$convId/calls/$callId/reject/', {});
+  }
+
+  Future<void> endCall(int convId, int callId) async {
+    await patch('/api/conversations/$convId/calls/$callId/end/', {});
+  }
+
+  Future<void> missCall(int convId, int callId) async {
+    await patch('/api/conversations/$convId/calls/$callId/miss/', {});
+  }
+
+  Future<List<CallSession>> getCallHistory({int? convId}) async {
+    final path = convId != null
+        ? '/api/conversations/$convId/calls/history/'
+        : '/api/calls/history/';
+    final data = await get(path);
+    final list = data is List ? data : (data['data'] as List? ?? []);
+    return list
+        .map((e) => CallSession.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 }

@@ -7,12 +7,12 @@ class User {
   final bool isOnline;
 
   User({
-      required this.id,
-      required this.username,
-      this.fullName,
-      this.email,
-      this.avatar,
-      this.isOnline = false,
+    required this.id,
+    required this.username,
+    this.fullName,
+    this.email,
+    this.avatar,
+    this.isOnline = false,
   });
 
   String get displayName => fullName?.isNotEmpty == true ? fullName! : username;
@@ -20,7 +20,7 @@ class User {
       displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
   factory User.fromJson(Map<String, dynamic> json) => User(
-        id: json['id'] as int,
+        id: (json['id'] as num?)?.toInt() ?? 0,
         username: json['username'] as String? ?? '',
         fullName: json['full_name'] as String?,
         email: json['email'] as String?,
@@ -45,7 +45,7 @@ class Message {
   final String messageType; // text, image, voice
   final String? file;
   final String? localFile; // Path to local file for optimistic preview
-  final DateTime createdAt;
+  final DateTime? createdAt;
   String status; // sending, delivered, seen
   final bool isEdited;
   List<Reaction> reactions;
@@ -58,7 +58,7 @@ class Message {
     this.messageType = 'text',
     this.file,
     this.localFile,
-    required this.createdAt,
+    this.createdAt,
     this.status = 'delivered',
     this.isEdited = false,
     this.reactions = const [],
@@ -66,12 +66,16 @@ class Message {
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
-    DateTime dt;
+    DateTime? dt;
     try {
-      final raw = json['created_at'] as String? ?? '';
-      dt = DateTime.parse(raw.endsWith('Z') ? raw : '${raw}Z').toLocal();
+      final raw = json['created_at'] as String?;
+      if (raw != null && raw.isNotEmpty) {
+        dt = DateTime.parse(raw.endsWith('Z') ? raw : '${raw}Z').toLocal();
+      } else {
+        dt = null;
+      }
     } catch (_) {
-      dt = DateTime.now();
+      dt = null;
     }
     final rawType = (json['message_type'] as String? ?? 'text').toLowerCase();
     final normalizedType =
@@ -130,5 +134,67 @@ class Conversation {
       lastMessage: lastMsgJson != null ? Message.fromJson(lastMsgJson) : null,
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
     );
+  }
+}
+
+class CallSession {
+  final int id;
+  final int conversationId;
+  final User caller;
+  final User receiver;
+  final String callType; // voice, video
+  final String status; // initiated, ongoing, ended, rejected, missed
+  final DateTime? startTime;
+  final DateTime? endTime;
+
+  CallSession({
+    required this.id,
+    required this.conversationId,
+    required this.caller,
+    required this.receiver,
+    required this.callType,
+    required this.status,
+    this.startTime,
+    this.endTime,
+  });
+
+  factory CallSession.fromJson(Map<String, dynamic> json) {
+    DateTime? st, et;
+    try {
+      if (json['start_time'] != null) st = DateTime.parse(json['start_time']);
+      if (json['end_time'] != null) et = DateTime.parse(json['end_time']);
+    } catch (_) {}
+
+    final rawConv = json['conversation'];
+    int convId = 0;
+    if (rawConv is num) {
+      convId = rawConv.toInt();
+    } else if (rawConv is Map && rawConv.containsKey('id')) {
+      convId = (rawConv['id'] as num?)?.toInt() ?? 0;
+    }
+
+    return CallSession(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      conversationId: convId,
+      caller: User.fromJson(json['caller'] as Map<String, dynamic>? ?? {}),
+      receiver: User.fromJson(json['receiver'] as Map<String, dynamic>? ?? {}),
+      callType: json['call_type'] as String? ?? 'voice',
+      status: json['status'] as String? ?? 'initiated',
+      startTime: st,
+      endTime: et,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'conversation': conversationId,
+      'caller': caller.toJson(),
+      'receiver': receiver.toJson(),
+      'call_type': callType,
+      'status': status,
+      'start_time': startTime?.toIso8601String(),
+      'end_time': endTime?.toIso8601String(),
+    };
   }
 }

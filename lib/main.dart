@@ -10,8 +10,8 @@ void main() async {
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
   ));
-  await AuthService().load();
   runApp(const ChatApp());
+  await AuthService().load();
 }
 
 class ChatApp extends StatefulWidget {
@@ -47,7 +47,8 @@ class _ChatAppState extends State<ChatApp> with WidgetsBindingObserver {
     if (!_loggedIn) return;
     if (state == AppLifecycleState.resumed) {
       ApiService().setOnlineStatus(true);
-    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
       ApiService().setOnlineStatus(false);
     }
   }

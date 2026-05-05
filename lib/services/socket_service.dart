@@ -10,16 +10,94 @@ class SocketService {
   factory SocketService() => _instance;
   SocketService._();
 
+  // Conversation socket
   WebSocketChannel? _channel;
   StreamSubscription? _sub;
   int? _convId;
+
+  // Call socket
+  WebSocketChannel? _callChannel;
+  StreamSubscription? _callSub;
+  int? _callId;
+
   bool _manualClose = false;
   Timer? _reconnectTimer;
   int _reconnectAttempts = 0;
   SocketPayloadCallback? onPayload;
+  SocketPayloadCallback? onCallPayload;
   VoidCallback? onOpen;
 
   bool get isOpen => _channel != null;
+
+  bool get isCallOpen => _callChannel != null;
+
+  void connectCall(int callId,
+      {SocketPayloadCallback? callback, VoidCallback? onConnected}) {
+    if (_callChannel != null && _callId == callId) {
+      onCallPayload = callback;
+      onConnected?.call();
+      return;
+    }
+    disconnectCall(manual: true);
+    _callId = callId;
+    onCallPayload = callback;
+    _doConnectCall(callId, onConnected);
+  }
+
+  void _doConnectCall(int callId, VoidCallback? onConnected) {
+    final auth = AuthService();
+    final base = auth.apiBase;
+    final token = auth.accessToken;
+    final wsBase = base
+        .replaceFirst('https://', 'wss://')
+        .replaceFirst('http://', 'ws://');
+    final uri = Uri.parse(
+        '$wsBase/ws/call/$callId/?token=${Uri.encodeComponent(token)}');
+
+    try {
+      _callChannel = WebSocketChannel.connect(uri);
+      _callSub = _callChannel!.stream.listen(
+        (data) {
+          try {
+            final payload = json.decode(data as String) as Map<String, dynamic>;
+            onCallPayload?.call(payload);
+          } catch (_) {}
+        },
+        onDone: () {
+          _callChannel = null;
+          if (!_manualClose) _scheduleReconnectCall(callId, onConnected);
+        },
+        onError: (_) {
+          _callChannel = null;
+          if (!_manualClose) _scheduleReconnectCall(callId, onConnected);
+        },
+      );
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _reconnectAttempts = 0;
+        onConnected?.call();
+      });
+    } catch (_) {
+      if (!_manualClose) _scheduleReconnectCall(callId, onConnected);
+    }
+  }
+
+  void _scheduleReconnectCall(int callId, VoidCallback? onConnected) {
+    final delay = Duration(
+        milliseconds: (3000 * (_reconnectAttempts + 1)).clamp(0, 30000));
+    _reconnectTimer = Timer(delay, () {
+      _reconnectAttempts++;
+      _doConnectCall(callId, onConnected);
+    });
+  }
+
+  void disconnectCall({bool manual = true}) {
+    _manualClose = manual;
+    _reconnectTimer?.cancel();
+    _callSub?.cancel();
+    _callChannel?.sink.close();
+    _callChannel = null;
+    _callSub = null;
+  }
 
   void connect(int convId,
       {SocketPayloadCallback? callback, VoidCallback? onConnected}) {
@@ -92,6 +170,17 @@ class SocketService {
   bool send(Map<String, dynamic> data) {
     try {
       final ch = _channel;
+      if (ch == null) return false;
+      ch.sink.add(json.encode(data));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool sendCall(Map<String, dynamic> data) {
+    try {
+      final ch = _callChannel;
       if (ch == null) return false;
       ch.sink.add(json.encode(data));
       return true;

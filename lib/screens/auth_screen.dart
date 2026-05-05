@@ -165,6 +165,7 @@ class _AuthScreenState extends State<AuthScreen>
                           height: 320,
                           child: TabBarView(
                             controller: _tab,
+                            physics: BouncingScrollPhysics(),
                             children: [
                               _LoginForm(
                                 usernameCtrl: _loginUsernameCtrl,

@@ -10,6 +10,8 @@ import '../services/api_service.dart';
 import '../services/socket_service.dart';
 import '../theme.dart';
 import '../widgets/message_bubble.dart';
+import 'call_screen.dart';
+import 'call_history_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final Conversation conversation;
@@ -105,6 +107,18 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
     final type = (p['type'] as String? ?? '').toLowerCase();
     final action = (p['action'] as String? ?? '').toLowerCase();
+
+    // Handle message deletion events
+    if (action == 'message_deleted' || type == 'message_deleted') {
+      final msgId = p['message_id'] as int?;
+      if (msgId != null) {
+        setState(() {
+          _messages.removeWhere((m) => m.id == msgId);
+        });
+        debugPrint('Message $msgId deleted by remote user');
+      }
+      return;
+    }
 
     // Broaden the check for message-related events
     if (type == 'message' ||
@@ -285,6 +299,28 @@ class _ChatScreenState extends State<ChatScreen> {
             if (m.id == mid) m.status = status;
           }
         });
+      }
+    } else if (type == 'call_event' ||
+        type == 'incoming_call' ||
+        type == 'call_update') {
+      final rawCall = p['call'] ?? p;
+      try {
+        final session = CallSession.fromJson(rawCall as Map<String, dynamic>);
+        if (session.status == 'initiated' &&
+            session.caller.id != _auth.me?.id) {
+          // Push incoming call screen
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => CallScreen(
+                session: session,
+                isIncoming: true,
+                otherUser: _conv.otherUser,
+              ),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('Call event error: $e');
       }
     }
   }
@@ -612,6 +648,33 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _initiateCall(String type) async {
+    try {
+      final session = await _api.initiateCall(_conv.id, type);
+
+      // Notify receiver through WebSocket
+      _socket.send({
+        'action': 'incoming_call',
+        'type': 'incoming_call',
+        'call': session.toJson(),
+      });
+
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => CallScreen(
+              session: session,
+              isIncoming: false,
+              otherUser: _conv.otherUser,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      _showSnack(e.toString());
+    }
+  }
+
   Future<void> _deleteMessage(Message msg) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -635,6 +698,11 @@ class _ChatScreenState extends State<ChatScreen> {
       await _api.deleteMessage(_conv.id, msg.id);
       setState(() {
         _messages.removeWhere((m) => m.id == msg.id);
+      });
+      // Notify other user through WebSocket
+      _socket.send({
+        'action': 'message_deleted',
+        'message_id': msg.id,
       });
       _showSnack('Message deleted');
     } catch (e) {
@@ -687,7 +755,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           )
                         : CircleAvatar(
                             radius: 18,
-                            backgroundColor: isDark ? kBrandGreen : Colors.white24,
+                            backgroundColor:
+                                isDark ? kBrandGreen : Colors.white24,
                             child: Text(
                               _conv.otherUser.initials,
                               style: TextStyle(
@@ -720,17 +789,30 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     IconButton(
                       icon: Icon(Icons.call_outlined, color: textColor),
-                      onPressed: () =>
-                          _showSnack('🎙️ Voice call — Coming soon!'),
+                      onPressed: () => _initiateCall('voice'),
                     ),
                     IconButton(
                       icon: Icon(Icons.videocam_outlined, color: textColor),
-                      onPressed: () =>
-                          _showSnack('📹 Video call — Coming soon!'),
+                      onPressed: () => _initiateCall('video'),
                     ),
-                    IconButton(
+                    PopupMenuButton<String>(
                       icon: Icon(Icons.more_vert, color: textColor),
-                      onPressed: () {},
+                      onSelected: (v) {
+                        if (v == 'history') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => CallHistoryScreen(
+                                    conversationId: _conv.id)),
+                          );
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(
+                          value: 'history',
+                          child: Text('Call History'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -772,9 +854,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                     _focusNode.requestFocus();
                                   }
                                 : null,
-                            onDelete: msg.senderId == _auth.me?.id && !msg.optimistic
-                                ? () => _deleteMessage(msg)
-                                : null,
+                            onDelete:
+                                msg.senderId == _auth.me?.id && !msg.optimistic
+                                    ? () => _deleteMessage(msg)
+                                    : null,
                             myUserId: _auth.me?.id,
                           );
                         },

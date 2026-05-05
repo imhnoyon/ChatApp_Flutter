@@ -5,6 +5,7 @@ import '../theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'chat_screen.dart';
 import 'profile_screen.dart';
+import 'call_history_screen.dart';
 
 class ConversationsScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -199,6 +200,17 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                       tooltip: 'Toggle theme',
                     ),
                     IconButton(
+                      icon: Icon(Icons.history_rounded, color: subColor),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const CallHistoryScreen()),
+                        );
+                      },
+                      tooltip: 'Call history',
+                    ),
+                    IconButton(
                       icon: Icon(Icons.logout_rounded, color: subColor),
                       onPressed: widget.onLogout,
                       tooltip: 'Logout',
@@ -272,7 +284,9 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
           conv: items[i],
           textColor: textColor,
           subColor: subColor,
-          avatarUrl: _api.resolveMediaUrl(items[i].otherUser.avatar).isEmpty ? null : _api.resolveMediaUrl(items[i].otherUser.avatar),
+          avatarUrl: _api.resolveMediaUrl(items[i].otherUser.avatar).isEmpty
+              ? null
+              : _api.resolveMediaUrl(items[i].otherUser.avatar),
           onTap: () => _openConversation(items[i]),
         ),
       ),
@@ -313,7 +327,8 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                         backgroundColor: kBrandGreen,
                         child: Text(user.initials,
                             style: const TextStyle(
-                                color: Colors.white, fontWeight: FontWeight.bold)),
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold)),
                       ),
                 title: Text(user.displayName,
                     style: TextStyle(
@@ -356,15 +371,15 @@ class _ConvTile extends StatelessWidget {
 
   String _time() {
     final m = conv.lastMessage;
-    if (m == null) return '';
-    final t = m.createdAt;
+    if (m == null || m.createdAt == null) return '';
+    final t = m.createdAt!;
     final now = DateTime.now();
     if (now.difference(t).inDays == 0) {
       final h = t.hour;
       final min = t.minute.toString().padLeft(2, '0');
       final ampm = h >= 12 ? 'PM' : 'AM';
       final hh = (h % 12 == 0 ? 12 : h % 12);
-      return '$hh:$min $ampm';
+      return '${hh}:${min} ${ampm}';
     }
     return '${t.day}/${t.month}';
   }

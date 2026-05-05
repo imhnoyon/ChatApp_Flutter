@@ -35,12 +35,13 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   String _fullUrl(String? path) => ApiService().resolveMediaUrl(path);
 
-  String _formatTime(DateTime t) {
+  String _formatTime(DateTime? t) {
+    if (t == null) return '';
     final h = t.hour;
     final min = t.minute.toString().padLeft(2, '0');
     final ampm = h >= 12 ? 'PM' : 'AM';
     final hh = (h % 12 == 0 ? 12 : h % 12);
-    return '$hh:$min $ampm';
+    return '${hh}:${min} ${ampm}';
   }
 
   @override
@@ -123,7 +124,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 padding: const EdgeInsets.only(right: 4),
                                 child: Text('Edited',
                                     style: TextStyle(
-                                        color: metaColor, 
+                                        color: metaColor,
                                         fontSize: 10,
                                         fontStyle: FontStyle.italic)),
                               ),
@@ -150,7 +151,8 @@ class _MessageBubbleState extends State<MessageBubble> {
                               GestureDetector(
                                 onTap: widget.onDelete,
                                 child: Icon(Icons.delete_outline,
-                                    size: 14, color: Colors.redAccent.withOpacity(0.8)),
+                                    size: 14,
+                                    color: Colors.redAccent.withOpacity(0.8)),
                               ),
                             ],
                           ],
