@@ -98,6 +98,24 @@ class Message {
           .toList(),
     );
   }
+
+  factory Message.fromCallSession(
+    CallSession session, {
+    required int? currentUserId,
+  }) {
+    final callLabel = session.callType == 'video' ? 'Video call' : 'Voice call';
+
+    return Message(
+      id: -(session.id == 0
+          ? DateTime.now().millisecondsSinceEpoch
+          : session.id),
+      senderId: session.caller.id,
+      text: callLabel,
+      messageType: 'call',
+      createdAt: session.endTime ?? session.startTime ?? DateTime.now(),
+      status: 'delivered',
+    );
+  }
 }
 
 class Reaction {
@@ -173,11 +191,33 @@ class CallSession {
       convId = (rawConv['id'] as num?)?.toInt() ?? 0;
     }
 
+    // Helper to extract a user from various possible payload shapes.
+    User _userFromAny(dynamic v, String idKey) {
+      try {
+        if (v is Map<String, dynamic>) return User.fromJson(v);
+        if (v is num) return User(id: v.toInt(), username: '', isOnline: false);
+      } catch (_) {}
+      // Fallback to separate id fields like caller_id / receiver_id
+      final rawId = json[idKey] ?? json['${idKey}_id'] ?? json['${idKey}s'];
+      if (rawId is num)
+        return User(id: rawId.toInt(), username: '', isOnline: false);
+      if (rawId is String) {
+        final parsed = int.tryParse(rawId);
+        if (parsed != null) {
+          return User(id: parsed, username: '', isOnline: false);
+        }
+      }
+      return User(id: 0, username: '', isOnline: false);
+    }
+
+    final caller = _userFromAny(json['caller'], 'caller');
+    final receiver = _userFromAny(json['receiver'], 'receiver');
+
     return CallSession(
       id: (json['id'] as num?)?.toInt() ?? 0,
       conversationId: convId,
-      caller: User.fromJson(json['caller'] as Map<String, dynamic>? ?? {}),
-      receiver: User.fromJson(json['receiver'] as Map<String, dynamic>? ?? {}),
+      caller: caller,
+      receiver: receiver,
       callType: json['call_type'] as String? ?? 'voice',
       status: json['status'] as String? ?? 'initiated',
       startTime: st,

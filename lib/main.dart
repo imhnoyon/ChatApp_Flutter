@@ -3,15 +3,20 @@ import 'package:flutter/services.dart';
 import 'services/api_service.dart';
 import 'screens/auth_screen.dart';
 import 'screens/conversations_screen.dart';
+import 'screens/call_screen.dart';
+import 'services/socket_service.dart';
+import 'models/models.dart';
 import 'theme.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
   ));
-  runApp(const ChatApp());
   await AuthService().load();
+  runApp(const ChatApp());
 }
 
 class ChatApp extends StatefulWidget {
@@ -32,7 +37,38 @@ class _ChatAppState extends State<ChatApp> with WidgetsBindingObserver {
     _loggedIn = _auth.isLoggedIn;
     WidgetsBinding.instance.addObserver(this);
     if (_loggedIn) {
-      ApiService().setOnlineStatus(true);
+      _connectPresenceAndNotifications();
+    }
+  }
+
+  void _connectPresenceAndNotifications() {
+    ApiService().setOnlineStatus(true);
+    SocketService().connectNotifications(
+        callback: _handleNotification,
+        onConnected: () {
+          debugPrint('🔔 Notifications socket active (main)');
+        });
+  }
+
+  void _handleNotification(Map<String, dynamic> p) {
+    try {
+      final type =
+          (p['type'] as String? ?? p['action'] as String? ?? '').toLowerCase();
+      if (type == 'incoming_call' ||
+          type == 'call_event' ||
+          type == 'call_update') {
+        final rawCall = p['call'] ?? p;
+        final session = CallSession.fromJson(rawCall as Map<String, dynamic>);
+        // If the call was initiated by someone else, show incoming call screen
+        if (session.status == 'initiated' &&
+            session.caller.id != _auth.me?.id) {
+          navigatorKey.currentState?.push(MaterialPageRoute(
+            builder: (_) => CallScreen(session: session, isIncoming: true),
+          ));
+        }
+      }
+    } catch (e) {
+      debugPrint('🔔 Notification handler error: $e');
     }
   }
 
@@ -55,12 +91,14 @@ class _ChatAppState extends State<ChatApp> with WidgetsBindingObserver {
 
   void _onLogin() {
     setState(() => _loggedIn = true);
-    ApiService().setOnlineStatus(true);
+    _connectPresenceAndNotifications();
   }
 
   void _onLogout() async {
     await ApiService().setOnlineStatus(false);
     await _auth.clear();
+    // Disconnect notifications socket
+    SocketService().disconnectNotifications(manual: true);
     setState(() => _loggedIn = false);
   }
 
@@ -69,6 +107,7 @@ class _ChatAppState extends State<ChatApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'ChatApp',
       debugShowCheckedModeBanner: false,
       theme: buildLightTheme(),

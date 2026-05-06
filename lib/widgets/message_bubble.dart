@@ -41,7 +41,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     final min = t.minute.toString().padLeft(2, '0');
     final ampm = h >= 12 ? 'PM' : 'AM';
     final hh = (h % 12 == 0 ? 12 : h % 12);
-    return '${hh}:${min} ${ampm}';
+    return '$hh:$min $ampm';
   }
 
   @override
@@ -111,6 +111,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                           msg: msg,
                           textColor: textColor,
                           fullUrl: _fullUrl,
+                          isMine: widget.isMine,
                         ),
 
                         const SizedBox(height: 2),
@@ -152,7 +153,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 onTap: widget.onDelete,
                                 child: Icon(Icons.delete_outline,
                                     size: 14,
-                                    color: Colors.redAccent.withOpacity(0.8)),
+                                    color: Colors.redAccent.withAlpha(204)),
                               ),
                             ],
                           ],
@@ -185,9 +186,13 @@ class _MessageContent extends StatefulWidget {
   final Message msg;
   final Color textColor;
   final String Function(String?) fullUrl;
+  final bool isMine;
 
   const _MessageContent(
-      {required this.msg, required this.textColor, required this.fullUrl});
+      {required this.msg,
+      required this.textColor,
+      required this.fullUrl,
+      required this.isMine});
 
   @override
   State<_MessageContent> createState() => _MessageContentState();
@@ -233,8 +238,9 @@ class _MessageContentState extends State<_MessageContent> {
         borderRadius: BorderRadius.circular(8),
         child: GestureDetector(
           onTap: () {
-            if (_retryKey > 0)
+            if (_retryKey > 0) {
               _retry(); // Only retry on tap if it failed before
+            }
             _openImage(context, url);
           },
           child: CachedNetworkImage(
@@ -283,6 +289,24 @@ class _MessageContentState extends State<_MessageContent> {
           msg.localFile != null && File(msg.localFile!).existsSync();
       final url = isLocal ? msg.localFile! : fullUrl(msg.file);
       return _AudioPlayer(url: url, isLocal: isLocal);
+    } else if (msg.messageType == 'call') {
+      final text = msg.text ?? 'Call';
+      final icon = widget.isMine ? Icons.call_made : Icons.call_received;
+      final color = Colors.green;
+
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(color: textColor, fontSize: 14, height: 1.4),
+            ),
+          ),
+        ],
+      );
     } else {
       return Text(
         msg.text ?? '',

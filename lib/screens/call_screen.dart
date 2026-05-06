@@ -46,13 +46,14 @@ class _CallScreenState extends State<CallScreen> {
       _session.id,
       callback: _handleSocketPayload,
       onConnected: () {
-        debugPrint('Connected to call WebSocket');
+        debugPrint('☎️ Connected to call WebSocket for call ${_session.id}');
       },
     );
   }
 
   void _handleSocketPayload(Map<String, dynamic> p) {
     if (!mounted) return;
+    debugPrint('☎️ Call WebSocket payload: $p');
     final type =
         (p['type'] as String? ?? p['action'] as String? ?? '').toLowerCase();
 
@@ -60,8 +61,10 @@ class _CallScreenState extends State<CallScreen> {
         type == 'call_update' ||
         p.containsKey('call_status')) {
       final status = (p['status'] ?? p['call_status']) as String?;
+      debugPrint('☎️ Call status update: $status');
       if (status == 'ongoing') {
         if (!_ongoing) {
+          debugPrint('☎️ Starting call timer');
           setState(() {
             _ongoing = true;
           });
@@ -70,6 +73,7 @@ class _CallScreenState extends State<CallScreen> {
       } else if (status == 'ended' ||
           status == 'rejected' ||
           status == 'missed') {
+        debugPrint('☎️ Call $status, closing screen');
         _timer?.cancel();
         if (mounted) Navigator.pop(context);
       }
@@ -98,6 +102,14 @@ class _CallScreenState extends State<CallScreen> {
         });
         _startTimer();
       }
+      // Notify remote via call websocket
+      try {
+        _socket.sendCall({
+          'action': 'call_update',
+          'status': 'ongoing',
+          'call': _session.toJson(),
+        });
+      } catch (_) {}
     } catch (e) {
       debugPrint('Answer error: $e');
     }
@@ -106,6 +118,14 @@ class _CallScreenState extends State<CallScreen> {
   Future<void> _reject() async {
     try {
       await _api.rejectCall(_session.conversationId, _session.id);
+      // Notify remote via call websocket
+      try {
+        _socket.sendCall({
+          'action': 'call_update',
+          'status': 'rejected',
+          'call': _session.toJson(),
+        });
+      } catch (_) {}
     } finally {
       if (mounted) Navigator.pop(context);
     }
@@ -114,6 +134,14 @@ class _CallScreenState extends State<CallScreen> {
   Future<void> _end() async {
     try {
       await _api.endCall(_session.conversationId, _session.id);
+      // Notify remote via call websocket
+      try {
+        _socket.sendCall({
+          'action': 'call_update',
+          'status': 'ended',
+          'call': _session.toJson(),
+        });
+      } catch (_) {}
     } finally {
       _timer?.cancel();
       if (mounted) Navigator.pop(context);

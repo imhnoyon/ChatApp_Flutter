@@ -79,9 +79,27 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _loadMessages() async {
     try {
       final msgs = await _api.getMessages(_conv.id);
+      List<CallSession> calls = [];
+      try {
+        calls = await _api.getCallHistory(convId: _conv.id);
+      } catch (_) {}
+      final callMessages = calls
+          .map((call) => Message.fromCallSession(
+                call,
+                currentUserId: _auth.me?.id,
+              ))
+          .where((m) => m.text != null)
+          .toList();
+      final merged = [...msgs, ...callMessages]..sort((a, b) {
+          final at = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bt = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final cmp = at.compareTo(bt);
+          if (cmp != 0) return cmp;
+          return a.id.compareTo(b.id);
+        });
       if (mounted) {
         setState(() {
-          _messages = msgs;
+          _messages = merged;
           _loading = false;
         });
         _scrollToBottom(immediate: true);
@@ -93,10 +111,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _connectSocket() {
+    debugPrint('💬 Connecting to conversation socket ${_conv.id}');
     _socket.connect(
       _conv.id,
       callback: _handleSocketPayload,
       onConnected: () {
+        debugPrint('💬 Connected to conversation socket');
         _socket.send({'action': 'mark_read'});
         _socket.send({'action': 'presence_ping'});
       },
@@ -105,6 +125,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _handleSocketPayload(Map<String, dynamic> p) {
     if (!mounted) return;
+    debugPrint('💬 Socket payload received: $p');
     final type = (p['type'] as String? ?? '').toLowerCase();
     final action = (p['action'] as String? ?? '').toLowerCase();
 
@@ -303,11 +324,39 @@ class _ChatScreenState extends State<ChatScreen> {
     } else if (type == 'call_event' ||
         type == 'incoming_call' ||
         type == 'call_update') {
+      debugPrint('📞 Call event received: type=$type, payload=$p');
       final rawCall = p['call'] ?? p;
       try {
         final session = CallSession.fromJson(rawCall as Map<String, dynamic>);
+        debugPrint(
+            '📞 Parsed call: id=${session.id}, status=${session.status}, caller_id=${session.caller.id}, receiver_id=${session.receiver.id}, my_id=${_auth.me?.id}');
+
+        // If caller id isn't present in parsed session, try common fallback keys
+        if ((session.caller.id == 0) && rawCall is Map<String, dynamic>) {
+          final fallbackCaller =
+              (rawCall['caller_id'] ?? rawCall['initiator'] ?? rawCall['from']);
+          if (fallbackCaller is num) {
+            final fixed = CallSession(
+              id: session.id,
+              conversationId: session.conversationId,
+              caller: User(id: fallbackCaller.toInt(), username: ''),
+              receiver: session.receiver,
+              callType: session.callType,
+              status: session.status,
+              startTime: session.startTime,
+              endTime: session.endTime,
+            );
+            _upsertCallLog(fixed);
+          } else {
+            _upsertCallLog(session);
+          }
+        } else {
+          _upsertCallLog(session);
+        }
+
         if (session.status == 'initiated' &&
             session.caller.id != _auth.me?.id) {
+          debugPrint('📞 ✅ Showing incoming call screen');
           // Push incoming call screen
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -318,11 +367,39 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           );
+        } else {
+          debugPrint(
+              '📞 ❌ Ignored: status=${session.status}, is_own_call=${session.caller.id == _auth.me?.id}');
         }
       } catch (e) {
-        debugPrint('Call event error: $e');
+        debugPrint('📞 Parse error: $e');
       }
     }
+  }
+
+  void _upsertCallLog(CallSession session) {
+    final callMsg = Message.fromCallSession(
+      session,
+      currentUserId: _auth.me?.id,
+    );
+    debugPrint(
+        '📞 Upserting call log: callId=${session.id}, messageId=${callMsg.id}, senderId=${callMsg.senderId}, myId=${_auth.me?.id}');
+    setState(() {
+      final idx = _messages.indexWhere((m) => m.id == callMsg.id);
+      if (idx != -1) {
+        _messages[idx] = callMsg;
+      } else {
+        _messages.add(callMsg);
+        _messages.sort((a, b) {
+          final at = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bt = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final cmp = at.compareTo(bt);
+          if (cmp != 0) return cmp;
+          return a.id.compareTo(b.id);
+        });
+      }
+    });
+    if (_stickToBottom) _scrollToBottom();
   }
 
   void _scrollToBottom({bool immediate = false}) {
@@ -359,6 +436,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     _msgCtrl.clear();
+    debugPrint('💬 _sendMessage: sending text="$text" to conv=${_conv.id}');
     final tempId = DateTime.now().millisecondsSinceEpoch;
     final tempMsg = Message(
       id: tempId,
@@ -372,6 +450,7 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _messages.add(tempMsg));
     _scrollToBottom();
     final sent = _socket.send({'action': 'send_message', 'text': text});
+    debugPrint('💬 _sendMessage: socket.send returned: $sent');
     if (!sent) {
       setState(() {
         final idx = _messages
@@ -650,14 +729,35 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initiateCall(String type) async {
     try {
+      debugPrint('Initiating $type call...');
       final session = await _api.initiateCall(_conv.id, type);
+      debugPrint(
+          'Call session created: ID=${session.id}, Status=${session.status}');
 
-      // Notify receiver through WebSocket
-      _socket.send({
-        'action': 'incoming_call',
-        'type': 'incoming_call',
-        'call': session.toJson(),
-      });
+      _upsertCallLog(session);
+
+      // Notify the remote user via the global notifications socket so they
+      // receive the incoming call even if not on this conversation screen.
+      try {
+        final notifSent = _socket.sendNotification({
+          'action': 'incoming_call',
+          'call': session.toJson(),
+          'conversation_id': _conv.id,
+          'target_user_id': _conv.otherUser.id,
+        });
+        debugPrint('📣 sendNotification returned: $notifSent');
+        if (notifSent == false) {
+          // Fallback: send a conversation-level call message so the recipient
+          // sees the call entry if notifications socket isn't connected.
+          final convSent = _socket.send({
+            'action': 'call_message',
+            'call': session.toJson(),
+          });
+          debugPrint('📣 Fallback conversation send returned: $convSent');
+        }
+      } catch (e) {
+        debugPrint('📣 sendNotification error: $e');
+      }
 
       if (mounted) {
         Navigator.of(context).push(
@@ -671,6 +771,7 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     } catch (e) {
+      debugPrint('Call initiation error: $e');
       _showSnack(e.toString());
     }
   }

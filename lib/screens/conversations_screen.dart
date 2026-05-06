@@ -117,6 +117,30 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating));
   }
 
+  Future<void> _confirmLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Do you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Logout', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      widget.onLogout();
+    }
+  }
+
   List<Conversation> get _filtered => _conversations.where((c) {
         final name = c.otherUser.displayName.toLowerCase();
         return name.contains(_searchTerm.toLowerCase());
@@ -212,7 +236,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                     ),
                     IconButton(
                       icon: Icon(Icons.logout_rounded, color: subColor),
-                      onPressed: widget.onLogout,
+                      onPressed: _confirmLogout,
                       tooltip: 'Logout',
                     ),
                   ],
@@ -379,7 +403,7 @@ class _ConvTile extends StatelessWidget {
       final min = t.minute.toString().padLeft(2, '0');
       final ampm = h >= 12 ? 'PM' : 'AM';
       final hh = (h % 12 == 0 ? 12 : h % 12);
-      return '${hh}:${min} ${ampm}';
+      return '$hh:$min $ampm';
     }
     return '${t.day}/${t.month}';
   }

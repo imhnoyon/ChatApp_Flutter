@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'api_service.dart';
 
@@ -20,11 +21,16 @@ class SocketService {
   StreamSubscription? _callSub;
   int? _callId;
 
+  // Notifications socket (global user-level notifications)
+  WebSocketChannel? _notifChannel;
+  StreamSubscription? _notifSub;
+
   bool _manualClose = false;
   Timer? _reconnectTimer;
   int _reconnectAttempts = 0;
   SocketPayloadCallback? onPayload;
   SocketPayloadCallback? onCallPayload;
+  SocketPayloadCallback? onNotifPayload;
   VoidCallback? onOpen;
 
   bool get isOpen => _channel != null;
@@ -54,29 +60,38 @@ class SocketService {
     final uri = Uri.parse(
         '$wsBase/ws/call/$callId/?token=${Uri.encodeComponent(token)}');
 
+    debugPrint('☎️ Connecting to call WebSocket: $uri');
     try {
       _callChannel = WebSocketChannel.connect(uri);
       _callSub = _callChannel!.stream.listen(
         (data) {
           try {
+            debugPrint('☎️ Raw WebSocket data: $data');
             final payload = json.decode(data as String) as Map<String, dynamic>;
+            debugPrint('☎️ Parsed WebSocket payload: $payload');
             onCallPayload?.call(payload);
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('☎️ Payload parse error: $e');
+          }
         },
         onDone: () {
+          debugPrint('☎️ Call WebSocket closed');
           _callChannel = null;
           if (!_manualClose) _scheduleReconnectCall(callId, onConnected);
         },
-        onError: (_) {
+        onError: (e) {
+          debugPrint('☎️ Call WebSocket error: $e');
           _callChannel = null;
           if (!_manualClose) _scheduleReconnectCall(callId, onConnected);
         },
       );
       Future.delayed(const Duration(milliseconds: 300), () {
         _reconnectAttempts = 0;
+        debugPrint('☎️ Call WebSocket connected successfully');
         onConnected?.call();
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('☎️ Call WebSocket connection error: $e');
       if (!_manualClose) _scheduleReconnectCall(callId, onConnected);
     }
   }
@@ -88,6 +103,77 @@ class SocketService {
       _reconnectAttempts++;
       _doConnectCall(callId, onConnected);
     });
+  }
+
+  void connectNotifications(
+      {SocketPayloadCallback? callback, VoidCallback? onConnected}) {
+    if (_notifChannel != null) {
+      // refresh callback
+      onNotifPayload = callback;
+      onConnected?.call();
+      return;
+    }
+    disconnectNotifications(manual: true);
+    onNotifPayload = callback;
+    _doConnectNotifications(onConnected);
+  }
+
+  void _doConnectNotifications(VoidCallback? onConnected) {
+    final auth = AuthService();
+    final base = auth.apiBase;
+    final token = auth.accessToken;
+    final wsBase = base
+        .replaceFirst('https://', 'wss://')
+        .replaceFirst('http://', 'ws://');
+    final uri = Uri.parse(
+        '$wsBase/ws/notifications/?token=${Uri.encodeComponent(token)}');
+    debugPrint('🔔 Connecting to notifications WebSocket: $uri');
+    try {
+      _notifChannel = WebSocketChannel.connect(uri);
+      _notifSub = _notifChannel!.stream.listen((data) {
+        try {
+          debugPrint('🔔 Raw notif data: $data');
+          final payload = json.decode(data as String) as Map<String, dynamic>;
+          onNotifPayload?.call(payload);
+        } catch (e) {
+          debugPrint('🔔 notif parse error: $e');
+        }
+      }, onDone: () {
+        debugPrint('🔔 Notifications socket closed');
+        _notifChannel = null;
+        if (!_manualClose) _scheduleReconnectNotif(onConnected);
+      }, onError: (e) {
+        debugPrint('🔔 Notifications socket error: $e');
+        _notifChannel = null;
+        if (!_manualClose) _scheduleReconnectNotif(onConnected);
+      });
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _reconnectAttempts = 0;
+        debugPrint('🔔 Notifications socket connected');
+        onConnected?.call();
+      });
+    } catch (e) {
+      debugPrint('🔔 Notifications connect error: $e');
+      if (!_manualClose) _scheduleReconnectNotif(onConnected);
+    }
+  }
+
+  void _scheduleReconnectNotif(VoidCallback? onConnected) {
+    final delay = Duration(
+        milliseconds: (3000 * (_reconnectAttempts + 1)).clamp(0, 30000));
+    _reconnectTimer = Timer(delay, () {
+      _reconnectAttempts++;
+      _doConnectNotifications(onConnected);
+    });
+  }
+
+  void disconnectNotifications({bool manual = true}) {
+    _manualClose = manual;
+    _reconnectTimer?.cancel();
+    _notifSub?.cancel();
+    _notifChannel?.sink.close();
+    _notifChannel = null;
+    _notifSub = null;
   }
 
   void disconnectCall({bool manual = true}) {
@@ -127,15 +213,20 @@ class SocketService {
         .replaceFirst('http://', 'ws://');
     final uri = Uri.parse(
         '$wsBase/ws/chat/$convId/?token=${Uri.encodeComponent(token)}');
+    debugPrint('💬 Connecting to conversation WebSocket: $uri');
 
     try {
       _channel = WebSocketChannel.connect(uri);
       _sub = _channel!.stream.listen(
         (data) {
           try {
+            debugPrint('💬 Raw WebSocket data: $data');
             final payload = json.decode(data as String) as Map<String, dynamic>;
+            debugPrint('💬 Parsed WebSocket payload: $payload');
             onPayload?.call(payload);
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('💬 Payload parse error: $e');
+          }
         },
         onDone: () {
           _channel = null;
@@ -170,10 +261,15 @@ class SocketService {
   bool send(Map<String, dynamic> data) {
     try {
       final ch = _channel;
-      if (ch == null) return false;
+      debugPrint('💬 Sending on conversation socket: $data');
+      if (ch == null) {
+        debugPrint('💬 Send failed: conversation socket not connected');
+        return false;
+      }
       ch.sink.add(json.encode(data));
       return true;
     } catch (_) {
+      debugPrint('💬 Send error: $_');
       return false;
     }
   }
@@ -181,10 +277,32 @@ class SocketService {
   bool sendCall(Map<String, dynamic> data) {
     try {
       final ch = _callChannel;
-      if (ch == null) return false;
+      debugPrint('☎️ Sending on call socket: $data');
+      if (ch == null) {
+        debugPrint('☎️ SendCall failed: call socket not connected');
+        return false;
+      }
       ch.sink.add(json.encode(data));
       return true;
     } catch (_) {
+      debugPrint('☎️ SendCall error: $_');
+      return false;
+    }
+  }
+
+  bool sendNotification(Map<String, dynamic> data) {
+    try {
+      final ch = _notifChannel;
+      debugPrint('🔔 Sending on notifications socket: $data');
+      if (ch == null) {
+        debugPrint(
+            '🔔 SendNotification failed: notifications socket not connected');
+        return false;
+      }
+      ch.sink.add(json.encode(data));
+      return true;
+    } catch (_) {
+      debugPrint('🔔 SendNotification error: $_');
       return false;
     }
   }
